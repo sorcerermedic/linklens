@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Go lint & test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: linklens
+          POSTGRES_PASSWORD: linklens
+          POSTGRES_DB: linklens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U linklens -d linklens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal web/embed.go)"
+      - name: go vet
+        run: |
+          go vet ./...
+          go vet -tags integration ./internal/store/postgres/...
+      - name: Unit tests
+        run: go test -race ./...
+      - name: Integration tests (PostgreSQL)
+        env:
+          INTEGRATION: "1"
+          DATABASE_URL: postgres://linklens:linklens@localhost:5432/linklens?sslmode=disable
+        run: go test -race -tags integration -count=1 ./internal/store/postgres/...
+      - name: Build
+        run: CGO_ENABLED=0 go build -o bin/linklens ./cmd/server
+
+  frontend:
+    name: Web lint, test & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build
+        run: docker build -t linklens:ci .
