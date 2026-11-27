@@ -1,0 +1,25 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Go
+bin/
+/dist/
+target/
+*.test
+*.out
+coverage.*
+
+# Frontend
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# Python tooling (not used, kept for consistency across repos)
+.venv/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
